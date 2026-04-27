@@ -25,6 +25,7 @@ public interface VendorService {
     VendorDocumentResponseDTO getVendorDocument(Long vendorId);
     List<VendorDocumentResponseDTO> getDocumentsByStatus(VerificationStatus status);
     Resource downloadDocument(Long documentId);
+    String getDocumentFileUrl(Long documentId);
     VendorDocumentResponseDTO replaceDocument(Long vendorId, MultipartFile file,
                                                DocumentType docType, String remarks);
     VendorDocumentResponseDTO reviewDocument(Long documentId, VerificationStatus status,

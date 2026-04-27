@@ -185,6 +185,13 @@ public class VendorServiceImpl implements VendorService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public String getDocumentFileUrl(Long documentId) {
+        VendorDocument document = findDocumentById(documentId);
+        return document.getFileUri();
+    }
+
+    @Override
     public VendorDocumentResponseDTO replaceDocument(Long vendorId, MultipartFile file,
                                                       DocumentType docType, String remarks) {
         log.info("Document replace: vendorId={}", vendorId);

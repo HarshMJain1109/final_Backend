@@ -114,6 +114,20 @@ public class VendorController {
             vendorService.getDocumentsByStatus(status)));
     }
 
+    @GetMapping(value = "/documents/{documentId}/file-url")
+    @PreAuthorize("hasRole('PROJECT_MANAGER') or hasRole('ADMIN')")
+    @Operation(summary = "Get document file URL by document ID [ADMIN / PROJECT_MANAGER]",
+               description = "Returns the stored file URI for a given document ID.")
+    public ResponseEntity<ApiResponseDTO<java.util.Map<String, Object>>> getDocumentFileUrl(
+            @PathVariable Long documentId) {
+        String fileUrl = vendorService.getDocumentFileUrl(documentId);
+        java.util.Map<String, Object> data = java.util.Map.of(
+            "documentId", documentId,
+            "fileUrl", fileUrl
+        );
+        return ResponseEntity.ok(ApiResponseDTO.success("Document file URL retrieved", data));
+    }
+
     @GetMapping(value = "/documents/{documentId}/download")
     @PreAuthorize("hasRole('PROJECT_MANAGER') or hasRole('ADMIN') or hasRole('VENDOR') or hasRole('COMPLIANCE_OFFICER')")
     @Operation(summary = "Download vendor document PDF [PM / ADMIN / VENDOR / COMPLIANCE_OFFICER]")
