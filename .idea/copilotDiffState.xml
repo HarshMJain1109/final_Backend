@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="/ProjectService (snapshot).java">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="/ProjectService (snapshot).java" />
+              <option name="originalContent" value="package com.buildledger.contract.service;&#10;&#10;import com.buildledger.contract.dto.request.ProjectRequestDTO;&#10;import com.buildledger.contract.dto.response.ProjectResponseDTO;&#10;import java.util.List;&#10;&#10;public interface ProjectService {&#10;    ProjectResponseDTO createProject(ProjectRequestDTO request);&#10;    ProjectResponseDTO getProjectById(Long projectId);&#10;    List&lt;ProjectResponseDTO&gt; getAllProjects();&#10;    List&lt;ProjectResponseDTO&gt; getProjectsByManager(Long managerId);&#10;    ProjectResponseDTO updateProject(Long projectId, ProjectRequestDTO request);&#10;    ProjectResponseDTO updateProjectStatus(Long projectId, com.buildledger.project.enums.ProjectStatus newStatus);&#10;    void deleteProject(Long projectId);&#10;}&#10;&#10;" />
+              <option name="updatedContent" value="package com.buildledger.contract.service;&#10;&#10;import com.buildledger.contract.dto.request.ProjectRequestDTO;&#10;import com.buildledger.contract.dto.response.ProjectResponseDTO;&#10;import com.buildledger.contract.enums.ProjectStatus;&#10;import java.util.List;&#10;&#10;public interface ProjectService {&#10;    ProjectResponseDTO createProject(ProjectRequestDTO request);&#10;    ProjectResponseDTO getProjectById(Long projectId);&#10;    List&lt;ProjectResponseDTO&gt; getAllProjects();&#10;    List&lt;ProjectResponseDTO&gt; getProjectsByManager(Long managerId);&#10;    ProjectResponseDTO updateProject(Long projectId, ProjectRequestDTO request);&#10;    ProjectResponseDTO updateProjectStatus(Long projectId, ProjectStatus newStatus);&#10;    void deleteProject(Long projectId);&#10;}&#10;&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
