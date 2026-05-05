@@ -30,6 +30,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.POST, "/vendors/register").permitAll()
+                .requestMatchers(HttpMethod.POST, "/vendors/auth/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/vendors/*/documents").permitAll()
                 .requestMatchers(HttpMethod.PUT, "/vendors/*/documents/replace").permitAll()
                 .requestMatchers(HttpMethod.GET, "/vendors/**").permitAll()
