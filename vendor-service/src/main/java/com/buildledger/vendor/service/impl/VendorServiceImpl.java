@@ -133,29 +133,40 @@ public class VendorServiceImpl implements VendorService {
     public void deleteVendor(Long vendorId) {
         Vendor vendor = findVendorById(vendorId);
 
-        // Guard: deny deletion if vendor has any ACTIVE or DRAFT contracts
+        // Guard: deny deletion if vendor is assigned to any contract (regardless of contract status)
         try {
             ApiResponseDTO<java.util.List<java.util.Map<String, Object>>> contractsResponse =
                 contractServiceClient.getContractsByVendor(vendorId);
-            if (contractsResponse.isSuccess() && contractsResponse.getData() != null) {
-                boolean hasLiveContracts = contractsResponse.getData().stream().anyMatch(c -> {
-                    String status = (String) c.get("status");
-                    return "ACTIVE".equals(status) || "DRAFT".equals(status);
-                });
-                if (hasLiveContracts) {
-                    throw new BadRequestException(
-                        "Cannot delete vendor '" + vendor.getName() +
-                        "' because they have active or draft contracts. Terminate or complete all contracts first.");
-                }
+
+            if (!contractsResponse.isSuccess() &&
+                    com.buildledger.vendor.feign.ContractServiceFallback.MARKER.equals(contractsResponse.getMessage())) {
+                throw new BadRequestException(
+                    "Cannot delete vendor '" + vendor.getName() +
+                    "': contract service is unavailable. Please try again later.");
+            }
+
+            if (contractsResponse.isSuccess()
+                    && contractsResponse.getData() != null
+                    && !contractsResponse.getData().isEmpty()) {
+                throw new BadRequestException(
+                    "Cannot delete vendor '" + vendor.getName() +
+                    "' because they are assigned to one or more contracts. " +
+                    "Remove all contract assignments first.");
             }
         } catch (BadRequestException e) {
             throw e;
         } catch (Exception e) {
             log.warn("Could not verify contracts for vendor {} before deletion: {}", vendorId, e.getMessage());
+            throw new BadRequestException(
+                "Cannot delete vendor '" + vendor.getName() +
+                "': unable to verify contract assignments. Please try again later.");
         }
 
-        vendorDocumentRepository.findByVendorVendorId(vendorId)
-            .ifPresent(doc -> fileStorageService.delete(doc.getFileUri()));
+        // Delete all documents from DB and disk before deleting the vendor (avoids FK constraint violation)
+        vendorDocumentRepository.findAllByVendorVendorId(vendorId).forEach(doc -> {
+            fileStorageService.delete(doc.getFileUri());
+            vendorDocumentRepository.delete(doc);
+        });
         vendorRepository.delete(vendor);
         log.info("Vendor deleted: id={}", vendorId);
     }
