@@ -10,6 +10,8 @@ import com.buildledger.delivery.exception.ResourceNotFoundException;
 import com.buildledger.delivery.exception.ServiceUnavailableException;
 import com.buildledger.delivery.feign.ContractServiceClient;
 import com.buildledger.delivery.feign.ContractServiceFallback;
+import com.buildledger.delivery.feign.VendorServiceClient;
+import com.buildledger.delivery.feign.VendorServiceFallback;
 import com.buildledger.delivery.repository.DeliveryRepository;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
@@ -31,11 +33,13 @@ class DeliveryServiceImpl implements com.buildledger.delivery.service.DeliverySe
 
     private final DeliveryRepository deliveryRepository;
     private final ContractServiceClient contractServiceClient;
+    private final VendorServiceClient vendorServiceClient;
 
     public DeliveryResponseDTO createDelivery(DeliveryRequestDTO request) {
         log.info("Creating delivery for contract {}", request.getContractId());
         Map<String, Object> contractData = validateContractActive(request.getContractId());
         validateDeliveryDateInWindow(request.getDate(), contractData);
+        validateVendorOwnership(contractData);
 
         Delivery delivery = Delivery.builder()
             .contractId(request.getContractId())
@@ -171,6 +175,47 @@ class DeliveryServiceImpl implements com.buildledger.delivery.service.DeliverySe
         if (!hasRole) {
             throw new org.springframework.security.access.AccessDeniedException(
                 "Access denied. Required roles: " + String.join(" or ", roles));
+        }
+    }
+
+    private void validateVendorOwnership(Map<String, Object> contractData) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return;
+        boolean isVendor = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_VENDOR"));
+        if (!isVendor) return;
+
+        Long authenticatedUserId = (Long) auth.getCredentials();
+        if (authenticatedUserId == null) return;
+
+        Object vendorIdObj = contractData.get("vendorId");
+        if (vendorIdObj == null) return;
+        Long contractVendorId = vendorIdObj instanceof Integer
+            ? ((Integer) vendorIdObj).longValue() : ((Number) vendorIdObj).longValue();
+
+        ApiResponseDTO<Map<String, Object>> vendorResponse;
+        try {
+            vendorResponse = vendorServiceClient.getVendorById(contractVendorId);
+        } catch (FeignException.NotFound e) {
+            throw new ResourceNotFoundException("Vendor", "id", contractVendorId);
+        } catch (FeignException e) {
+            throw new ServiceUnavailableException("Vendor Service is currently unavailable. Please try again later.");
+        } catch (Exception e) {
+            throw new ServiceUnavailableException("Vendor Service is currently unavailable. Please try again later.");
+        }
+        if (VendorServiceFallback.MARKER.equals(vendorResponse.getMessage())) {
+            throw new ServiceUnavailableException("Vendor Service is currently unavailable. Please try again later.");
+        }
+        if (!vendorResponse.isSuccess() || vendorResponse.getData() == null) {
+            throw new ResourceNotFoundException("Vendor", "id", contractVendorId);
+        }
+        Object userIdObj = vendorResponse.getData().get("userId");
+        if (userIdObj == null) return;
+        Long vendorUserId = userIdObj instanceof Integer
+            ? ((Integer) userIdObj).longValue() : ((Number) userIdObj).longValue();
+        if (!authenticatedUserId.equals(vendorUserId)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "Access denied: you do not own the vendor associated with this contract.");
         }
     }
 

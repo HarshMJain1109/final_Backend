@@ -10,6 +10,8 @@ import com.buildledger.delivery.exception.ResourceNotFoundException;
 import com.buildledger.delivery.exception.ServiceUnavailableException;
 import com.buildledger.delivery.feign.ContractServiceClient;
 import com.buildledger.delivery.feign.ContractServiceFallback;
+import com.buildledger.delivery.feign.VendorServiceClient;
+import com.buildledger.delivery.feign.VendorServiceFallback;
 import com.buildledger.delivery.repository.ServiceRecordRepository;
 import feign.FeignException;
 import lombok.RequiredArgsConstructor;
@@ -32,10 +34,12 @@ class ServiceTrackingServiceImpl implements ServiceTrackingService {
 
     private final ServiceRecordRepository serviceRecordRepository;
     private final ContractServiceClient contractServiceClient;
+    private final VendorServiceClient vendorServiceClient;
 
     public ServiceResponseDTO createService(ServiceRequestDTO request) {
         log.info("Creating service record for contract {}", request.getContractId());
-        validateContractActive(request.getContractId());
+        Map<String, Object> contractData = validateContractActive(request.getContractId());
+        validateVendorOwnership(contractData);
 
         ServiceRecord record = ServiceRecord.builder()
             .contractId(request.getContractId())
@@ -59,7 +63,7 @@ class ServiceTrackingServiceImpl implements ServiceTrackingService {
 
     @Transactional(readOnly = true)
     public List<ServiceResponseDTO> getServicesByContract(Long contractId) {
-        validateContractActive(contractId);
+        validateContractActive(contractId); // return value intentionally unused here
         return serviceRecordRepository.findByContractId(contractId).stream().map(this::mapToResponse).collect(Collectors.toList());
     }
 
@@ -93,7 +97,7 @@ class ServiceTrackingServiceImpl implements ServiceTrackingService {
             throw new BadRequestException("Service details can only be updated when status is PENDING.");
         }
         if (request.getContractId() != null) {
-            validateContractActive(request.getContractId());
+            validateContractActive(request.getContractId()); // return value intentionally unused here
             service.setContractId(request.getContractId());
         }
         if (request.getDescription() != null) service.setDescription(request.getDescription());
@@ -112,7 +116,7 @@ class ServiceTrackingServiceImpl implements ServiceTrackingService {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private void validateContractActive(Long contractId) {
+    private Map<String, Object> validateContractActive(Long contractId) {
         ApiResponseDTO<Map<String, Object>> response;
         try {
             response = contractServiceClient.getContractById(contractId);
@@ -127,11 +131,54 @@ class ServiceTrackingServiceImpl implements ServiceTrackingService {
         if (!response.isSuccess() || response.getData() == null) {
             throw new ResourceNotFoundException("Contract", "id", contractId);
         }
-        String status = (String) response.getData().get("status");
+        Map<String, Object> data = response.getData();
+        String status = (String) data.get("status");
         if (!"ACTIVE".equals(status)) {
             throw new BadRequestException(
                 "Service records can only be logged against ACTIVE contracts. Contract " + contractId +
                 " is currently " + status + ".");
+        }
+        return data;
+    }
+
+    private void validateVendorOwnership(Map<String, Object> contractData) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null) return;
+        boolean isVendor = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_VENDOR"));
+        if (!isVendor) return;
+
+        Long authenticatedUserId = (Long) auth.getCredentials();
+        if (authenticatedUserId == null) return;
+
+        Object vendorIdObj = contractData.get("vendorId");
+        if (vendorIdObj == null) return;
+        Long contractVendorId = vendorIdObj instanceof Integer
+            ? ((Integer) vendorIdObj).longValue() : ((Number) vendorIdObj).longValue();
+
+        ApiResponseDTO<Map<String, Object>> vendorResponse;
+        try {
+            vendorResponse = vendorServiceClient.getVendorById(contractVendorId);
+        } catch (FeignException.NotFound e) {
+            throw new ResourceNotFoundException("Vendor", "id", contractVendorId);
+        } catch (FeignException e) {
+            throw new ServiceUnavailableException("Vendor Service is currently unavailable. Please try again later.");
+        } catch (Exception e) {
+            throw new ServiceUnavailableException("Vendor Service is currently unavailable. Please try again later.");
+        }
+        if (VendorServiceFallback.MARKER.equals(vendorResponse.getMessage())) {
+            throw new ServiceUnavailableException("Vendor Service is currently unavailable. Please try again later.");
+        }
+        if (!vendorResponse.isSuccess() || vendorResponse.getData() == null) {
+            throw new ResourceNotFoundException("Vendor", "id", contractVendorId);
+        }
+        Object userIdObj = vendorResponse.getData().get("userId");
+        if (userIdObj == null) return;
+        Long vendorUserId = userIdObj instanceof Integer
+            ? ((Integer) userIdObj).longValue() : ((Number) userIdObj).longValue();
+        if (!authenticatedUserId.equals(vendorUserId)) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                "Access denied: you do not own the vendor associated with this contract.");
         }
     }
 
